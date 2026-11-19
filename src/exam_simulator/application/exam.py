@@ -1,3 +1,6 @@
+import sys
+import traceback
+
 from random import sample
 from time import perf_counter, sleep
 from domain import Student, Examiner, Question
@@ -26,10 +29,16 @@ class Exam:
         self.exam_questions: list[Question] = []
 
     def run_exam(self) -> None:
-        self.wait_for_start()
-        self.choose_questions()
-        self.process_exam_students()
-        self.finished_exam()
+        try:
+            self.wait_for_start()
+            self.choose_questions()
+            self.process_exam_students()
+            self.finished_exam()
+        except Exception as e:
+            print(f"\n[ОШИБКА В ПРОЦЕССЕ ЭКЗАМЕНАТОРА {self.examiner.name}]:")
+            traceback.print_exc()
+            sys.exit(1)
+            
 
     def finished_exam(self) -> None:
         """

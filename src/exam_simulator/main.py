@@ -1,5 +1,6 @@
 from pathlib import Path
 from time import sleep
+import traceback
 
 from multiprocessing import Manager, Queue, Process, Event
 from multiprocessing.managers import SyncManager
@@ -12,7 +13,9 @@ from infrastructure.exam_analytics_service import ExamAnalyticsService
 from infrastructure.exam_statistics_printer import ExamStatisticsPrinter
 from infrastructure.exam_statistics_storage import ExamStatisticsStorage
 
-DATA_DIR = Path(__file__).parent / "data"
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+
 
 def main(manager: SyncManager) -> None:
     # достаем данные из файлов
@@ -43,24 +46,38 @@ def main(manager: SyncManager) -> None:
             start_exam,
         )
         process = Process(
-            target = worker.run_exam,
+            target=worker.run_exam,
         )
         process.start()
         processes.append(process)
 
     printer = ExamStatisticsPrinter()
     ExamStatisticsPrinter.clear_terminal()
-    # Запускаем старт всех экзаменов
-    time_start_exam()
-    analytics_service.start_time_exam()
-    start_exam.set()
-    print("Экзамен начался")
-    sleep(0.5)
 
-    ExamStatisticsPrinter.clear_terminal()
-    while any(p.is_alive() for p in processes):
-        analytics_service.update_this_time()
-        printer.print_state_exam(analytics_service, storage.student_statistics, storage.examination_statistics)
+    try:
+        time_start_exam()
+        analytics_service.start_time_exam()
+        start_exam.set()
+        print("Экзамен начался")
+        sleep(0.5)
+
+        ExamStatisticsPrinter.clear_terminal()
+        while any(p.is_alive() for p in processes):
+            for p in processes:
+                if not p.is_alive() and p.exitcode != 0:
+                    raise RuntimeError(f"Процесс-экзаменатор завершился с ошибкой (код {p.exitcode}).")
+
+            analytics_service.update_this_time()
+            printer.print_state_exam(analytics_service, storage.student_statistics, storage.examination_statistics)
+
+    except Exception as e:
+        print(f"\n[КРИТИЧЕСКАЯ ОШИБКА В ГЛАВНОМ ПРОЦЕССЕ]: {e}")
+        raise e
+    finally:
+        for p in processes:
+            if p.is_alive():
+                p.terminate()
+                p.join()
 
     for process in processes:
         process.join()
@@ -75,18 +92,22 @@ def time_start_exam() -> None:
 
 
 def get_data() -> tuple[list[Student], list[Examiner], list[Question]]:
-    with open("data/students.txt", "r", encoding="utf-8") as file:
-        students = [Student(*line.strip().split()) for line in file]
+    with open(DATA_DIR / "students.txt", "r", encoding="utf-8") as file:
+        students = [Student(*line.strip().split()) for line in file if line.strip()]
 
-    with open("data/examiners.txt", "r", encoding="utf-8") as file:
-        examiners = [Examiner(*line.strip().split()) for line in file]
+    with open(DATA_DIR / "examiners.txt", "r", encoding="utf-8") as file:
+        examiners = [Examiner(*line.strip().split()) for line in file if line.strip()]
 
-    with open("data/questions.txt", "r", encoding="utf-8") as file:
-        questions = [Question(line.strip()) for line in file]
+    with open(DATA_DIR / "questions.txt", "r", encoding="utf-8") as file:
+        questions = [Question(line.strip()) for line in file if line.strip()]
 
     return students, examiners, questions
 
 
 if __name__ == '__main__':
-    with Manager() as man:
-        main(man)
+    try:
+        with Manager() as man:
+            main(man)
+    except Exception:
+        print('\n--- ПРОГРАММА АВАРИЙНО ЗАВЕРШЕНА ---')
+        traceback.print_exc()

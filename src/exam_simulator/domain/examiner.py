@@ -47,8 +47,6 @@ class Examiner:
         while randint(1, 3) == 3:
             if answer in words:
                 words.remove(answer)
-            else:
-                break    
             
             if not words:
                 break

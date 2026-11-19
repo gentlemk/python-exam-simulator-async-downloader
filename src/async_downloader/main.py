@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 import prettytable
 import os
 
+BASE_DIR = Path(__file__).resolve().parent
+
 class ImageDownloader():
     def __init__(self,
             save_dir : Path,
@@ -97,30 +99,40 @@ async def run_downloader(save_dir : Path):
 
         table = prettytable.PrettyTable(["Ссылка", "Статус"])
         for result in results:
-            table.add_row([result[0], result[1]])
+            if isinstance(result, BaseException):
+                table.add_row(["Неизвестный URL", "Ошибка"])
+            else:
+                table.add_row([result[0], result[1]])
         table.align = "l"
         table.max_width = 100
         print(table)
 
 
-def get_path_images_save(prompt = "Введите путь для сохранения изображений: ") -> Path:
+def get_path_images_save(prompt="Введите путь для сохранения изображений: ") -> Path:
     while True:
         try:
             user_path = input(prompt).strip()
             if not user_path:
                 raise ValueError("Путь не может быть пустым")
+            
             base_path = Path(user_path)
+            
             if base_path.suffix:
                 raise ValueError("Путь не может быть с файловым расширением")
-            # parents - создаст родительские директории
-            # exist_ok - не будет ошибки если директория уже создана
+            
+            if not base_path.is_absolute():
+                base_path = BASE_DIR / base_path
+                
             base_path.mkdir(parents=True, exist_ok=True)
+            
             if not base_path.is_dir():
                 raise ValueError("Это не директория")
 
             if not os.access(base_path, os.W_OK):
                 raise PermissionError("Нет прав на запись в эту директорию")
+                
             return base_path
+            
         except PermissionError:
             print("Ошибка: Недостаточно прав для создания директории")
         except ValueError as e:

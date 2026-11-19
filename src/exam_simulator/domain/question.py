@@ -22,7 +22,9 @@ class Question:
         """
         target_words = custom_words if custom_words is not None else self.words
         probabilities = self._make_probability(len(target_words))
-
+        if not target_words:
+            raise ValueError("Не может быть пустым target_words")
+        
         if is_female:
             probabilities.reverse()
 
